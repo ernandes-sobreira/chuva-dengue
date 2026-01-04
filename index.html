@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chuva & Dengue — Jogo Educativo</title>
+
+<style>
+html,body{
+  margin:0;padding:0;height:100%;
+  background:linear-gradient(160deg,#06151f,#071a12);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  overflow:hidden;
+}
+canvas{width:100vw;height:100vh;display:block;touch-action:manipulation}
+
+.hud{
+  position:fixed;top:10px;left:10px;right:10px;
+  display:flex;justify-content:space-between;
+  color:#e9fff3;font-weight:900;z-index:10
+}
+.pill{
+  background:rgba(0,0,0,.45);
+  padding:8px 12px;border-radius:999px;font-size:13px
+}
+.note{
+  position:fixed;bottom:8px;left:8px;right:8px;
+  text-align:center;font-size:12px;color:rgba(233,255,243,.7)
+}
+.overlay{
+  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);z-index:20
+}
+.card{
+  background:rgba(0,0,0,.65);padding:18px;border-radius:16px;
+  max-width:560px;color:#e9fff3
+}
+button{
+  width:100%;padding:12px;border:none;border-radius:12px;
+  background:#35ff9a;color:#042010;font-weight:900
+}
+</style>
+</head>
+
+<body>
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div class="pill">⏱️ <span id="time">60</span>s</div>
+  <div class="pill">⭐ <span id="score">0</span></div>
+  <div class="pill">🦟 <span id="kills">0</span></div>
+  <div class="pill">🪣 <span id="buckets">0</span></div>
+</div>
+
+<div class="note">
+Idealizado por <b>Ernandes Sobreira</b> para <b>educação ambiental</b>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h2>🌧️ Chuva & Dengue</h2>
+    <p>
+      O ambiente já começa crítico.<br>
+      A cada <b>3 segundos</b> surgem novos recipientes 🪣.<br><br>
+      🪣 água parada gera 🦟<br>
+      🦟 baldes cheios = explosão de mosquitos<br><br>
+      👉 Toque para agir.<br>
+      🪣 eliminar: 3 toques
+    </p>
+    <button onclick="startGame()">Começar</button>
+  </div>
+</div>
+
+<script>
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+let W,H;
+function resize(){W=innerWidth;H=innerHeight;c.width=W;c.height=H}
+addEventListener("resize",resize);resize();
+
+const rand=(a,b)=>a+Math.random()*(b-a);
+const dist2=(x1,y1,x2,y2)=>{let dx=x1-x2,dy=y1-y2;return dx*dx+dy*dy};
+
+let time=60,score=0,kills=0,bucketKills=0;
+let running=false,last=0;
+
+const mosquitoes=[],buckets=[],rain=[];
+let rainLevel=2,rainTimer=0,spawnTimer=0;
+
+function spawnBucket(fill){
+  buckets.push({
+    x:rand(60,W-60),
+    y:rand(120,H-120),
+    fill,
+    hp:3,
+    acc:0,
+    alive:true
+  });
+}
+
+function spawnMosquito(x,y,weak=false){
+  mosquitoes.push({
+    x,y,
+    vx:rand(-180,180),
+    vy:rand(-180,180),
+    alive:true,
+    weak
+  });
+}
+
+function spawnRain(){
+  rain.push({x:rand(0,W),y:rand(-H,0),vy:rand(450,850)});
+}
+
+function startGame(){
+  overlay.style.display="none";
+  time=60;score=0;kills=0;bucketKills=0;
+  mosquitoes.length=0;buckets.length=0;rain.length=0;
+  rainLevel=2;rainTimer=0;spawnTimer=0;
+  running=true;last=performance.now();
+
+  // INÍCIO CRÍTICO
+  for(let i=0;i<3;i++) spawnBucket(1.2);   // cheios
+  for(let i=0;i<2;i++) spawnBucket(rand(0.6,0.8)); // quase cheios
+
+  // mosquitos iniciais
+  for(const b of buckets){
+    for(let k=0;k<3;k++) spawnMosquito(b.x,b.y,true);
+  }
+
+  requestAnimationFrame(loop);
+}
+
+c.addEventListener("click",e=>{
+  if(!running)return;
+  const x=e.clientX,y=e.clientY;
+  let hit=false;
+
+  for(const m of mosquitoes){
+    if(m.alive&&dist2(x,y,m.x,m.y)<60*60){
+      m.alive=false;
+      kills++;score+=m.weak?5:10;
+      hit=true;
+    }
+  }
+
+  for(const b of buckets){
+    if(b.alive&&dist2(x,y,b.x,b.y)<70*70){
+      b.hp--;score+=15;hit=true;
+      if(b.hp<=0){
+        b.alive=false;
+        bucketKills++;
+        score+=120;
+      }
+    }
+  }
+
+  if(!hit) score=Math.max(0,score-1);
+});
+
+function loop(ts){
+  if(!running)return;
+  const dt=Math.min(.033,(ts-last)/1000);last=ts;
+  time-=dt;
+  if(time<=0){
+    running=false;
+    overlay.style.display="flex";
+    document.querySelector(".card").innerHTML=`
+      <h2>Fim do jogo</h2>
+      <p>
+        Pontos: <b>${score}</b><br>
+        🪣 eliminados: ${bucketKills}<br>
+        🦟 mortos: ${kills}<br><br>
+        <b>Mensagem ambiental:</b><br>
+        Na vida real, eliminar água parada é mais eficaz do que matar mosquitos.
+      </p>
+      <button onclick="location.reload()">Jogar novamente</button>`;
+    return;
+  }
+
+  // chuva mais intensa a cada 10s
+  rainTimer+=dt;
+  if(rainTimer>=10){rainTimer=0;rainLevel++}
+
+  // novos baldes a cada 3s
+  spawnTimer+=dt;
+  if(spawnTimer>=3){
+    spawnTimer=0;
+    const n=Math.floor(rand(1,5));
+    for(let i=0;i<n;i++){
+      const bFill=rand(0.0,0.3);
+      spawnBucket(bFill);
+      // poucos mosquitos iniciais
+      for(let k=0;k<2;k++) spawnMosquito(buckets[buckets.length-1].x,buckets[buckets.length-1].y,true);
+    }
+  }
+
+  while(rain.length<90*rainLevel) spawnRain();
+
+  for(const b of buckets){
+    if(!b.alive)continue;
+
+    // enchimento gradual (como antes)
+    b.fill+=dt*(0.22*rainLevel);
+
+    if(b.fill>=1){
+      // explosão de mosquitos
+      b.acc+=dt*(3*rainLevel);
+      while(b.acc>1){
+        b.acc--;
+        spawnMosquito(b.x,b.y,false);
+      }
+    }
+  }
+
+  for(const m of mosquitoes){
+    if(!m.alive)continue;
+    m.x+=m.vx*dt;
+    m.y+=m.vy*dt;
+    if(m.x<0||m.x>W)m.vx*=-1;
+    if(m.y<80||m.y>H)m.vy*=-1;
+  }
+
+  ctx.clearRect(0,0,W,H);
+
+  for(const r of rain){
+    r.y+=r.vy*dt;
+    if(r.y>H){r.y=rand(-100,0);r.x=rand(0,W)}
+    ctx.strokeStyle="rgba(87,199,255,.6)";
+    ctx.beginPath();ctx.moveTo(r.x,r.y);ctx.lineTo(r.x+4,r.y+14);ctx.stroke();
+  }
+
+  for(const b of buckets){
+    if(b.alive){
+      ctx.font="30px emoji";
+      ctx.fillText("🪣",b.x-15,b.y+10);
+      ctx.fillStyle="#57c7ff";
+      ctx.fillRect(b.x-25,b.y+25,50*Math.min(b.fill,1),6);
+    }
+  }
+
+  for(const m of mosquitoes){
+    if(m.alive){
+      ctx.font="26px emoji";
+      ctx.fillText("🦟",m.x-13,m.y+9);
+    }
+  }
+
+  document.getElementById("time").textContent=time.toFixed(0);
+  document.getElementById("score").textContent=score;
+  document.getElementById("kills").textContent=kills;
+  document.getElementById("buckets").textContent=bucketKills;
+
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
